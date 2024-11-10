@@ -1,7 +1,7 @@
 #!/bin/sh 
 #SBATCH --gres=gpu:L40:1
 #SBATCH --partition=general
-#SBATCH --mem=100
+#SBATCH --mem=50Gb
 #SBATCH --cpus-per-task=8
 #SBATCH -t 0-16:00:00              # time limit:  add - for days (D-HH:MM) 
 #SBATCH --job-name=ecco_
