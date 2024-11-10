@@ -9,12 +9,12 @@ from tqdm import tqdm
 from utils import judge_submit
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--test_cases_path', default='./data/codenet/generated_test_cases')
-parser.add_argument('--judge_url', default='http://<YOUR_URL>:PORT')
-parser.add_argument('--input_path', default=None)
+parser.add_argument('--test_cases_path', default='./ECCO/data/codenet/generated_test_cases')
+parser.add_argument('--judge_url', default='http://ec2-18-220-179-89.us-east-2.compute.amazonaws.com:2358') 
+parser.add_argument('--input_path', default='/home/srijithr/course_hw/anlp_project/inference_generations/generated_codes/edit_deepseek_instruct_nrowsNone_tokens1024_temp0.4_fewshotex0_samples1_2024-11-09_16:40:04.jsonl')
 parser.add_argument('--code_col_name', default='generated_codes')
-parser.add_argument('--num_runs', default=3)
-parser.add_argument('--num_tests', default=None, type=int)
+parser.add_argument('--num_runs', default=1)
+parser.add_argument('--num_tests', default=20, type=int)
 parser.add_argument('--out_path', default='./judge_eval/edit/')
 parser.add_argument('--store_errors', default=True, action='store_false')
 args = parser.parse_args() 
@@ -33,7 +33,7 @@ def calculate_speedup(json_data,file_name):
             fast_codes = [fast_codes] # Make it a singular list
 
         # Get the test cases
-        problem_input_folder = args.test_cases_path + problem_id
+        problem_input_folder = os.path.join(args.test_cases_path,problem_id)
         if not os.path.exists(problem_input_folder):
             print(f"Does not exist {problem_input_folder}")
             continue

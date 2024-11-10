@@ -64,7 +64,7 @@ parser.add_argument('--test_cases_path', default='./data/codenet/public_test_cas
 parser.add_argument('--nrows', default=None,type=int)
 parser.add_argument('--num_gpus',type=int, default=1)
 parser.add_argument('--finetuned_weights',type=str, default=None) # The official repo does not have finetuning code - have to check the shared folder
-parser.add_argument('--eval_mode',type=str, choices=['edit', 'nl2code', 'self-refine', 'exec-refine','nl2code-self-refine', 'nl-exec-refine', 'nl2code-exec-refine', 'nl2code-nl-exec-refine'], default='edit') 
+parser.add_argument('--eval_mode',type=str, choices=['edit', 'nl2code', 'self-refine', 'exec-refine','nl2code-self-refine', 'nl-exec-refine', 'nl2code-exec-refine', 'nl2code-nl-exec-refine'], default='self-refine') 
 args = parser.parse_args()
 
 if 'nl2code' not in args.eval_mode: # Editing setting
@@ -155,7 +155,12 @@ if args.eval_mode in ['edit', 'nl2code']: # Non refinement settings
 elif 'self-refine' in args.eval_mode:
     # ====== Step 1. Generate Faster Codes (First Try) =============
     print('\n=== Generating Codes: Try 0 =====\n')
-    test = test.apply(coder_prompt_builder, axis=1, engine=engine, train=train, few_shot=args.few_shot_examples, instruct_version=args.instruct_version) # Added prompts to test    
+    #test = test.apply(coder_prompt_builder, axis=1, engine=engine, train=train, few_shot=args.few_shot_examples, instruct_version=args.instruct_version) # Added prompts to test  
+    # 
+    test['prompt'] = test.apply(
+    lambda row: coder_prompt_builder(row, train=train, engine=engine,few_shot=args.few_shot_examples, instruct_version=args.instruct_version)['prompt'],
+    axis=1)
+    
     prompts = list(test['prompt'])
 
     # For now doing self-refine with 1 sample
@@ -169,7 +174,12 @@ elif 'self-refine' in args.eval_mode:
         # ========== Step 2. Feedback ============
         print(f'\n=== Feedback {iteration} =====\n')
         # Get feedbacks prompts
-        test = test.apply(feedback_prompt_builder, axis=1, try_col_name=f'generated_codes_{iteration}', engine=engine, train=train, few_shot=args.few_shot_examples, instruct_version=args.instruct_version)
+        #test = test.apply(feedback_prompt_builder, axis=1, try_col_name=f'generated_codes_{iteration}', engine=engine, train=train, few_shot=args.few_shot_examples, instruct_version=args.instruct_version)
+        test['feedback_prompt'] = test.apply(
+            lambda row: feedback_prompt_builder(row, try_col_name=f'generated_codes_{iteration}', engine=engine, train=train, few_shot=args.few_shot_examples, instruct_version=args.instruct_version)['feedback_prompt'],
+            axis=1
+        )
+
         feedback_prompts = list(test['feedback_prompt'])
 
         # Get feeedbacks
@@ -180,7 +190,11 @@ elif 'self-refine' in args.eval_mode:
         # ========== Step 3. Refine =============
         print(f'\n=== Generating refinement: {iteration} =====\n')
         # Get refinement prompts 
-        test = test.apply(refine_prompt_builder, axis=1, prev_try_col_name=f'generated_codes_{iteration}', feedback_col_name=f'feedback_{iteration}', engine=engine, train=train, few_shot=args.few_shot_examples, instruct_version=args.instruct_version)
+        #test = test.apply(refine_prompt_builder, axis=1, prev_try_col_name=f'generated_codes_{iteration}', feedback_col_name=f'feedback_{iteration}', engine=engine, train=train, few_shot=args.few_shot_examples, instruct_version=args.instruct_version)
+        test['refine_prompt'] = test.apply(
+            lambda row: refine_prompt_builder(row, prev_try_col_name=f'generated_codes_{iteration}', feedback_col_name=f'feedback_{iteration}', engine=engine, train=train, few_shot=args.few_shot_examples, instruct_version=args.instruct_version)['refine_prompt'],
+            axis=1)
+        
         refine_prompts = list(test['refine_prompt'])
         
         # Get refined codes
