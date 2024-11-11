@@ -9,9 +9,9 @@ from tqdm import tqdm
 from utils import judge_submit
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--test_cases_path', default='./ECCO/data/codenet/generated_test_cases')
-parser.add_argument('--judge_url', default='http://ec2-18-220-179-89.us-east-2.compute.amazonaws.com:2358') 
-parser.add_argument('--input_path', default='/home/srijithr/course_hw/anlp_project/inference_generations/generated_codes/edit_deepseek_instruct_nrowsNone_tokens1024_temp0.4_fewshotex0_samples1_2024-11-09_16:40:04.jsonl')
+parser.add_argument('--test_cases_path', default='/Users/srijith/courses/11711-ANLP/anlp_project/data/codenet/public_test_cases')
+parser.add_argument('--judge_url', default='http://ec2-18-220-179-89.us-east-2.compute.amazonaws.com:2358')
+parser.add_argument('--input_path', default='/Users/srijith/courses/11711-ANLP/anlp_project/ECCO/outputs/srijith_inference_outputs/edit_deepseek_instruct_nrowsNone_tokens1024_temp0.4_fewshotex0_samples1_2024-11-10_08:21:27.jsonl')
 parser.add_argument('--code_col_name', default='generated_codes')
 parser.add_argument('--num_runs', default=1)
 parser.add_argument('--num_tests', default=20, type=int)
@@ -23,6 +23,10 @@ error_list = []
 
 def calculate_speedup(json_data,file_name):
     speedup_data={}
+    file_path = os.path.join(args.out_path, args.code_col_name + '_' + args.input_path.split("/")[-1])
+
+    if not os.path.exists(args.out_path):
+        os.makedirs(args.out_path)
 
     for index,row in tqdm(json_data.iterrows(), total=len(json_data)):
         slow_code = row['input']
@@ -46,13 +50,15 @@ def calculate_speedup(json_data,file_name):
 
         data = os.listdir(problem_input_folder)
         input_files = [file for file in data if file.startswith("input")]
+        if args.num_tests: # not None
+            if args.num_tests > len(input_files):
+                input_files = input_files[:args.num_tests]
+
+        num_tests = len(input_files)
         input_files = sorted(input_files)
 
         # Stats for each test case
         num_tests = len(input_files)
-
-        if args.num_tests: # not None
-            num_tests = args.num_tests
 
         num_samples = len(fast_codes)
 
@@ -86,7 +92,7 @@ def calculate_speedup(json_data,file_name):
 
         # ======= Pick the best generated sample ========
         # Pick the solution that is the most correct first
-        most_correct_samples = [] # ids
+        most_correct_samples = [] # ids - saves sample id of the code with highest pass rate
 
         num_passed_test = {x[0]: len(x[1]) for x in output_pass.items()} # x[0] sample id, x[1] is the set of passed test_ids, and get num
         max_pass_rate = max(num_passed_test.values()) # Max pass rate number
@@ -164,15 +170,9 @@ def calculate_speedup(json_data,file_name):
             
         speedup_data[index] = (values)
 
-    speedup_data_values = speedup_data
-    
-    if not os.path.exists(args.out_path):
-        os.makedirs(args.out_path)
-
-    file_path = os.path.join(args.out_path, args.code_col_name + '_' + args.input_path.split("/")[-1])
-    with open(file_path, 'w') as json_file:
-        print('Saving evaluation results to', file_path)
-        json.dump(speedup_data_values, json_file, indent=2)
+        with open(file_path, 'w') as json_file:
+            #print('Saving evaluation results to', file_path)
+            json.dump(speedup_data, json_file, indent=2)
 
 if __name__=='__main__':
       input_file = args.input_path
