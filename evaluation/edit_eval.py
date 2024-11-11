@@ -71,24 +71,31 @@ def calculate_speedup(json_data,file_name):
         judge_url = args.judge_url
         # judge_url = f'{args.judge_url}:{args.judge_port}/'
 
-        # For all test cases for the problem
-        input_valid, input_pass, input_errors, input_run_times, input_memory = judge_submit(
-            slow_code, problem_id, args.test_cases_path, args.num_runs, synchronous=True, judge_url=judge_url,
-            number_of_tests=args.num_tests
-        )
-
-        # Get stats for all generated samples
-        for sample_id, fast_code in enumerate(fast_codes): # For each sample
-            sample_valid, sample_pass, sample_errors, sample_run_times, sample_memory = judge_submit(
-                fast_code, problem_id, args.test_cases_path, args.num_runs, synchronous=True, judge_url=judge_url,
+        try:
+           
+            # For all test cases for the problem
+            input_valid, input_pass, input_errors, input_run_times, input_memory = judge_submit(
+                slow_code, problem_id, args.test_cases_path, args.num_runs, synchronous=True, judge_url=judge_url,
                 number_of_tests=args.num_tests
             )
 
-            output_valid[sample_id] = sample_valid
-            output_pass[sample_id] = sample_pass
-            output_run_times[sample_id] = sample_run_times
-            output_memory[sample_id] = sample_memory
-            output_errors[sample_id] = sample_errors
+            # Get stats for all generated samples
+            for sample_id, fast_code in enumerate(fast_codes): # For each sample
+                sample_valid, sample_pass, sample_errors, sample_run_times, sample_memory = judge_submit(
+                    fast_code, problem_id, args.test_cases_path, args.num_runs, synchronous=True, judge_url=judge_url,
+                    number_of_tests=args.num_tests
+                )
+
+                output_valid[sample_id] = sample_valid
+                output_pass[sample_id] = sample_pass
+                output_run_times[sample_id] = sample_run_times
+                output_memory[sample_id] = sample_memory
+                output_errors[sample_id] = sample_errors
+        except Exception as e:
+            print(f"<marker> Error in judge_submit part of loop: {e}")
+            print(f'<marker>  skipping sample {index}')
+            continue
+
 
         # ======= Pick the best generated sample ========
         # Pick the solution that is the most correct first

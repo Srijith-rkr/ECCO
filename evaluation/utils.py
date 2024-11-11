@@ -1,6 +1,6 @@
 import pandas as pd
 import os
-from time import time
+import time 
 import requests
 import asyncio
     
@@ -51,8 +51,8 @@ def judge_eval_single_test(
         except Exception as e:
             print(f"Error: {e}")
             print(f"Connection error on attempt {attempt + 1}: {e}")
-            print("Retrying in 10 seconds...")
-            time.sleep(10)
+            print("Retrying in 20 seconds...")
+            time.sleep(20)
             attempt += 1
 
     if not worked:  
