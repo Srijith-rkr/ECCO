@@ -35,11 +35,33 @@ def judge_eval_single_test(
         'wall_time_limit': 20, # Max possible time and memory limits
         'memory_limit': 512000
     }
+    attempt = 0
+    max_attempts = 5
+    worked = False
+    while attempt < max_attempts:
+        try:
+            if synchronous:
+                post_res = requests.post(judge_url+'/submissions/?wait=true', request_body)
+                worked = True
+                break
+            else:
+                post_res = requests.post(judge_url+'/submissions', request_body)
+                worked = True
+                break
+        except Exception as e:
+            print(f"Error: {e}")
+            print(f"Connection error on attempt {attempt + 1}: {e}")
+            print("Retrying in 10 seconds...")
+            time.sleep(10)
+            attempt += 1
 
-    if synchronous:
-        post_res = requests.post(judge_url+'/submissions/?wait=true', request_body)
-    else:
-        post_res = requests.post(judge_url+'/submissions', request_body)
+    if not worked:  
+        print("Failed to connect to judge server")
+        token = ''
+        status_url = judge_url + '/submissions' + f'/{token}'
+        post_res = None
+        return token, status_url, post_res
+
 
     if 'token' in post_res:
         token = post_res['token']
