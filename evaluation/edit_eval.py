@@ -9,10 +9,10 @@ from tqdm import tqdm
 from utils import judge_submit
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--test_cases_path', default='/Users/srijith/courses/11711-ANLP/anlp_project/data/codenet/public_test_cases')
+parser.add_argument('--test_cases_path', default='/Users/srijith/courses/11711-ANLP/anlp_project/data/codenet/generated_test_cases')
 parser.add_argument('--judge_url', default='http://ec2-18-220-179-89.us-east-2.compute.amazonaws.com:2358')
-parser.add_argument('--input_path', default='/Users/srijith/courses/11711-ANLP/anlp_project/ECCO/outputs/srijith_inference_outputs/edit_deepseek_instruct_nrowsNone_tokens1024_temp0.4_fewshotex0_samples1_2024-11-10_08:21:27.jsonl')
-parser.add_argument('--code_col_name', default='generated_codes')
+parser.add_argument('--input_path', default='/Users/srijith/courses/11711-ANLP/anlp_project/ECCO/outputs/srijith_inference_outputs/exec-refine_deepseek_nrowsNone_tokens1024_temp0.4_samples1_numrefine1_2024-11-10_08:42:21.jsonl')
+parser.add_argument('--code_col_name', default=None) # ignore this - coded to automatically pick the latest code column
 parser.add_argument('--num_runs', default=1)
 parser.add_argument('--num_tests', default=20, type=int)
 parser.add_argument('--out_path', default='./judge_eval/edit/')
@@ -177,4 +177,10 @@ def calculate_speedup(json_data,file_name):
 if __name__=='__main__':
       input_file = args.input_path
       json_data = pd.read_json(input_file, orient='records', lines = True)
+
+      generated_codes_columns = [col for col in json_data.columns if col.startswith('generated_codes_')]
+      max_index = max(int(col.split('_')[-1]) for col in generated_codes_columns)
+      max_generated_codes_column = f'generated_codes_{max_index}'
+
+      args.code_col_name = max_generated_codes_column
       calculate_speedup(json_data,input_file)
