@@ -19,39 +19,64 @@ from accelerate import Accelerator
 parser = argparse.ArgumentParser()
 
 # Add arguments with default values
-parser.add_argument("--train_path", default="/data/tir/projects/tir6/general/vveerend/improving-code-efficiency/shared/data/filtered_sped_up_train.jsonl", help="Path to the training data file")
-parser.add_argument("--eval_path", default="/data/tir/projects/tir6/general/vveerend/improving-code-efficiency/shared/data/filtered_sped_up_val.jsonl", help="Path to the evaluation data file")
-parser.add_argument('--model', default='/data/models/huggingface/meta-llama/CodeLlama-7b-Python-hf')
+# parser.add_argument("--train_path", default="/data/tir/projects/tir6/general/vveerend/improving-code-efficiency/shared/data/filtered_sped_up_train.jsonl", help="Path to the training data file")
+# parser.add_argument("--eval_path", default="/data/tir/projects/tir6/general/vveerend/improving-code-efficiency/shared/data/filtered_sped_up_val.jsonl", help="Path to the evaluation data file")
+parser.add_argument('--model', default='deepseek-ai/deepseek-coder-7b-instruct-v1.5')
 parser.add_argument('--lora', default=True)
-parser.add_argument('--instruct', default=False, action='store_true')
-parser.add_argument('--markdown_format', default=False, action='store_true')
+parser.add_argument('--instruct', default=True, action='store_true') # Check this
+parser.add_argument('--markdown_format', default=True, action='store_true') # deepseek specifice adjustment
 parser.add_argument('--device_map', default=True, action='store_false')
 parser.add_argument('--exec_feedback', default=False, action='store_true')
 parser.add_argument('--hub_model_name', default=None)
-parser.add_argument('--wandb_run_name', default=None)
-
+parser.add_argument('--wandb_run_name', default='DeepSeek-7B-history_based_SFT')
 # Train args
-parser.add_argument('--batch_size', type=int, default=32)
-parser.add_argument('--lora_rank', type=int, default=8)
+parser.add_argument('--batch_size', type=int, default=2)
+parser.add_argument('--gradient_accumulation_steps', type=int, default=4)  # They finetune on 4 gpus with per device batch size of 2
+# adjust 
+parser.add_argument('--lora_rank', type=int, default=8) 
 parser.add_argument('--max_seq_len', type=int, default=1024)
-parser.add_argument('--log_interval', type=int, default=1000)
+parser.add_argument('--log_interval', type=int, default=10)
 
 # Parse the arguments
 args = parser.parse_args()
 
-# Assign the argument values to variables
-train_file = args.train_path
-eval_file = args.eval_path
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0" # for single gpu
+#  launch script with python for single gpu
+#   for multi-gpu do : accelerate launch --config_file sft_cfg.yaml pair_finetuning.py 
 
-train_dataset = load_dataset("json", data_files=train_file)
-eval_dataset = load_dataset("json", data_files=eval_file)
+if torch.cuda.device_count() > 1:
+    multi_gpu = True
+    device_map = None 
+else:
+    multi_gpu = False
+    device_map = 'auto'
+
+
+if multi_gpu:
+    accelerator = Accelerator() 
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0" # for single gpu 
+
+# SRI 
+args.gradient_accumulation_steps =  args.gradient_accumulation_steps // torch.cuda.device_count()
+print(f'Gradient accumulation steps: {args.gradient_accumulation_steps}')
+print('There are {} GPUs available.'.format(torch.cuda.device_count()))
+# Assign the argument values to variables
+# train_file = args.train_path
+# eval_file = args.eval_path
+# accelerator = Accelerator()
+
+dataset = load_dataset('EfficientCode/ECCO', 'edit')
+
+train_dataset = dataset['train']
+eval_dataset = dataset['val']
 
 base_model = args.model
 model = AutoModelForCausalLM.from_pretrained(
     base_model,
     # load_in_8bit = True,
     torch_dtype=torch.bfloat16,
-    device_map="auto" if args.device_map else None
+    # sri
+    device_map= device_map, #None, #"auto" if args.device_map else None  to run with acceleatr
 )
 tokenizer = AutoTokenizer.from_pretrained(base_model)
 
@@ -140,19 +165,19 @@ if resume_from_checkpoint:
     else:
         print(f"Checkpoint {resume_from_checkpoint} not found")
 
-wandb_project = "Optim-finetune"
+wandb_project = '' # "Optim-finetune" let it got to the default HF dir
 if len(wandb_project) > 0:
     os.environ["WANDB_PROJECT"] = wandb_project
 
-if torch.cuda.device_count() > 1:
-    # keeps Trainer from trying its own DataParallelism when more than 1 gpu is available
-    model.is_parallelizable = True
-    model.model_parallel = True
+# if torch.cuda.device_count() > 1:
+#     # keeps Trainer from trying its own DataParallelism when more than 1 gpu is available
+#     model.is_parallelizable = True
+#     model.model_parallel = True
 
 batch_size = args.batch_size
 per_device_train_batch_size = args.batch_size
 # gradient_accumulation_steps = batch_size // per_device_train_batch_size
-output_dir = f"/data/tir/projects/tir6/general/swaghjal/checkpoints/checkpoints_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}"
+output_dir = f"/home/srijithr/course_hw/anlp_project/finetuned_checkpoints/checkpoints_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}"
 
 training_args = TrainingArguments(
         per_device_train_batch_size=per_device_train_batch_size,
@@ -163,11 +188,12 @@ training_args = TrainingArguments(
         learning_rate=1e-3,
         fp16=True,
         optim="adamw_torch",
-        evaluation_strategy="steps", # if val_set_size > 0 else "no",
+        eval_strategy="steps", # if val_set_size > 0 else "no",
         save_strategy="steps",
+        gradient_accumulation_steps = args.gradient_accumulation_steps,
         logging_steps=args.log_interval,
-        eval_steps=args.log_interval,
-        save_steps=args.log_interval,
+        eval_steps= 1000, #args.log_interval,
+        save_steps= 1000, #args.log_interval,
         output_dir=output_dir,
         # save_total_limit=3,
         load_best_model_at_end=False,
@@ -179,8 +205,8 @@ training_args = TrainingArguments(
 
 trainer = Trainer(
     model=model,
-    train_dataset=tokenized_train_dataset['train'],
-    eval_dataset=tokenized_val_dataset['train'],
+    train_dataset=tokenized_train_dataset,
+    eval_dataset=tokenized_val_dataset,
     args=training_args,
     data_collator=DataCollatorForSeq2Seq(
         tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
@@ -193,9 +219,9 @@ old_state_dict = model.state_dict
 model.state_dict = (lambda self, *_, **__: get_peft_model_state_dict(self, old_state_dict())).__get__(
     model, type(model)
 )
-if torch.__version__ >= "2" and sys.platform != "win32":
-    print("compiling the model")
-    model = torch.compile(model)
+# if torch.__version__ >= "2" and sys.platform != "win32":
+#     print("compiling the model")
+#     model = torch.compile(model)
 
 if trainer.accelerator.is_main_process:
     print('Hi from main process!!!')
