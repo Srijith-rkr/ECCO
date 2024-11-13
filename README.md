@@ -2,6 +2,26 @@
 
 This repository contains the source code for reimplementing the paper "ECCO: Can We Improve Model-Generated Code Efficiency Without Sacrificing Functional Correctness?" and analysing the results.
 
+## Dashboard of Inference and Evaluation Outputs
+The outputs from our baseline repoduction can be found in the dashboard directory with the structure shown below. We have 2 subdirectories for the 2 models we use to reproduce the baselines. Each of these subdirectories are further divided based on inference and evaluation outputs and then by task type at the next level.
+
+- dashboard
+  - codellama_13b
+    - inference_outputs
+      - history_based
+      - nl_based
+    - judge_outputs
+      - history_based
+      - nl_based
+  - deepseek
+    - inference_outputs
+      - history_based
+      - nl_based
+      - sft 
+    - judge_outputs
+      - history_based
+      - nl_based
+
 ## Dataset
 The dataset is available on Huggingface at: [CodeEff/ECCO](https://huggingface.co/datasets/CodeEff/ECCO).
 
@@ -29,49 +49,61 @@ unzip test_cases.zip
 ### Setup a judge on AWS
    Guide can be found in the evaluation README
 
-### Running inference for NL-based tasks (NL2Code)
+### Running inference
+NL-Instructed tasks have 'eval-mode's that begin with nl2code.
 
 #### Pre-Refine 
 
 * DeepSeek
 ```sh
-   python experiments/inference.py --eval_mode nl2code --judge_url http://<PUBLIC_URL>:2358 --model deepseek
+   python experiments/inference.py --eval_mode <nl2code|edit> --few_shot_example <Number of in-context examples> --judge_url http://<PUBLIC_URL>:2358 --model deepseek
 ```
 * CodeLLaMa-13b
 ```sh
-   python experiments/inference.py --eval_mode nl2code --judge_url http://<PUBLIC_URL>:2358 --model codellama_13b --num_gpus 2
+   python experiments/inference.py --eval_mode <nl2code|edit> --few_shot_example <Number of in-context examples> --judge_url http://<PUBLIC_URL>:2358 --model codellama_13b --num_gpus 2
 ```
 #### Self-Refine (with Natural Language Feedback)
 
 * DeepSeek
 ```sh
-   python experiments/inference.py --eval_mode nl2code-self-refine --judge_url http://<PUBLIC_URL>:2358 --model deepseek
+   python experiments/inference.py --eval_mode <nl2code-self-refine|self-refine> --judge_url http://<PUBLIC_URL>:2358 --model deepseek
 ```
 * CodeLLaMa-13b
 ```sh
-   python experiments/inference.py --eval_mode nl2code-self-refine --judge_url http://<PUBLIC_URL>:2358 --model codellama_13b --num_gpus 2
+   python experiments/inference.py --eval_mode <nl2code-self-refine|self-refine> --judge_url http://<PUBLIC_URL>:2358 --model codellama_13b --num_gpus 2
 ```
 #### Refine with Interpreter Feedback
 
 * DeepSeek
 ```sh
-   python experiments/inference.py --eval_mode nl-exec-refine --judge_url http://<PUBLIC_URL>:2358 --model deepseek
+   python experiments/inference.py --eval_mode <nl2code-exec-refine|exec-refine> --judge_url http://<PUBLIC_URL>:2358 --model deepseek
 ```
 * CodeLLaMa-13b
 ```sh
-   python experiments/inference.py --eval_mode nl-exec-refine --judge_url http://<PUBLIC_URL>:2358 --model codellama_13b --num_gpus 2
+   python experiments/inference.py --eval_mode <nl2code-exec-refine|exec-refine>  --judge_url http://<PUBLIC_URL>:2358 --model codellama_13b --num_gpus 2
 ```
 #### Refine with Interpreter Feedback and Natural Language
 
 * DeepSeek
 ```sh
-   python experiments/inference.py --eval_mode nl-exec-refine --judge_url http://<PUBLIC_URL>:2358 --model deepseek
+   python experiments/inference.py --eval_mode <nl2code-nl-exec-refine|nl-exec-refine> --judge_url http://<PUBLIC_URL>:2358 --model deepseek
 ```
 * CodeLLaMa-13b
 ```sh
-   python experiments/inference.py --eval_mode nl-exec-refine --judge_url http://<PUBLIC_URL>:2358 --model codellama_13b --num_gpus 2
+   python experiments/inference.py --eval_mode <nl2code-nl-exec-refine|nl-exec-refine> --judge_url http://<PUBLIC_URL>:2358 --model codellama_13b --num_gpus 2
 ```
 
+### Running Evaluation
+
+#### For NL-Instructed Tasks
+```sh
+   python ECCO/evaluation/generate_eval.py --judge_url http://<PUBLIC_URL>:2358 --input_path <path_to_jsonl_generated_in_inference> --code_col_name <generated_codes[_<Last iteration for refinement tasks>]>
+```
+
+#### For History-based Editing
+```sh
+   python ECCO/evaluation/edit_eval.py --judge_url http://<PUBLIC_URL>:2358 --input_path <path_to_jsonl_generated_in_inference> --code_col_name <generated_codes[_<Last iteration for refinement tasks>]>
+```
 
 ## Experiments
 
@@ -81,7 +113,6 @@ unzip test_cases.zip
 1. `evaluation` consists of scripts to run evaluation of model generated code on the Judge0 environment server hosted on AWS. Please see instructions to setup the evaluation server.
    - `edit_eval.py` is the script for evaluating code generated on the metrics for the history-based editing setting
    - `generate_eval.py` is the script for evaluating code generated on the metrics for the NL-instructed generation setting
-
    - `calculate_scores.py` is the script to calculate the Pass@1 accuracy with speedup and memory reduction.
    
 2. `experiments` consists of the scripts to run modelling experiment. 
