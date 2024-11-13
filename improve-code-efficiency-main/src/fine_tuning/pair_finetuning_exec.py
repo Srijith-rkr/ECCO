@@ -1,9 +1,9 @@
 from datetime import datetime
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
+os.environ['HF_HOME'] = '/data/tir/projects/tir7/user_data/srijithr/hf_cache_dir/'
 import sys
 import argparse
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
-os.environ['HF_HOME'] = '/data/tir/projects/tir7/user_data/srijithr/hf_cache_dir/'
 
 import torch
 from peft import (
@@ -21,15 +21,15 @@ from accelerate import Accelerator
 parser = argparse.ArgumentParser()
 
 # Add arguments with default values
-# parser.add_argument("--train_path", default="/data/tir/projects/tir6/general/vveerend/improving-code-efficiency/shared/data/filtered_sped_up_train.jsonl", help="Path to the training data file")
-# parser.add_argument("--eval_path", default="/data/tir/projects/tir6/general/vveerend/improving-code-efficiency/shared/data/filtered_sped_up_val.jsonl", help="Path to the evaluation data file")
+parser.add_argument("--train_path", default="/home/srijithr/course_hw/anlp_project/ECCO/improve-code-efficiency-main/src/fine_tuning/data/filtered_sped_up_train_w_exec_str.jsonl", help="Path to the training data file")
+parser.add_argument("--eval_path", default="/home/srijithr/course_hw/anlp_project/ECCO/improve-code-efficiency-main/src/fine_tuning/data/filtered_sped_up_val_w_exec_str.jsonl", help="Path to the evaluation data file")
 parser.add_argument('--model', default='deepseek-ai/deepseek-coder-7b-instruct-v1.5')
 parser.add_argument('--lora', default=True)
 parser.add_argument('--instruct', default=True, action='store_true') # Check this
 parser.add_argument('--markdown_format', default=True, action='store_true') # True for deepseek specifice adjustment; False for codellama
 parser.add_argument('--device_map', default=True, action='store_false')
-parser.add_argument('--exec_feedback', default=False, action='store_true')
-parser.add_argument('--hub_model_name', default=None)
+parser.add_argument('--exec_feedback', default=True, action='store_true')
+parser.add_argument('--hub_model_name', default='exec_feedback_deepseek')
 parser.add_argument('--wandb_run_name', default='DeepSeek-7B-history_based_SFT')
 # Train args
 parser.add_argument('--batch_size', type=int, default=2)
@@ -53,26 +53,29 @@ else:
     multi_gpu = False
     device_map = 'auto'
 
-output_dir = f"/data/tir/projects/tir7/user_data/srijithr/hf_cache_dir/checkpoints_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}"
+output_dir = f"/data/tir/projects/tir7/user_data/srijithr/hf_cache_dir/exec_checkpoints_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}"
 
 if multi_gpu:
     accelerator = Accelerator() 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0" # for single gpu 
 
 # SRI 
-args.gradient_accumulation_steps =  args.gradient_accumulation_steps // torch.cuda.device_count()
+# args.gradient_accumulation_steps =  args.gradient_accumulation_steps // torch.cuda.device_count()
 print(f'Gradient accumulation steps: {args.gradient_accumulation_steps}')
 print('There are {} GPUs available.'.format(torch.cuda.device_count()))
 # Assign the argument values to variables
-# train_file = args.train_path
-# eval_file = args.eval_path
+train_file = args.train_path
+eval_file = args.eval_path
 # accelerator = Accelerator()
-x = fast_code['train'].filter(lambda example: example['problem_id'].startswith('p00001'))
+# x = fast_code['train'].filter(lambda example: example['problem_id'].startswith('p00001'))
 
-dataset = load_dataset('EfficientCode/ECCO', 'edit')
+# dataset = load_dataset('EfficientCode/ECCO', 'edit')
 
-train_dataset = dataset['train']
-eval_dataset = dataset['val']
+# train_dataset = dataset['train']
+# eval_dataset = dataset['val']
+train_dataset = load_dataset("json", data_files=train_file)['train']
+eval_dataset = load_dataset("json", data_files=eval_file)['train']
+
 
 base_model = args.model
 model = AutoModelForCausalLM.from_pretrained(
@@ -195,10 +198,10 @@ training_args = TrainingArguments(
         fp16=True,
         optim="adamw_torch",
         # SRIJITH eval_strategy for ecco env and evaluation strategy for spin env
-        eval_strategy="steps", # if val_set_size > 0 else "no",
+        eval_strategy="no", # if val_set_size > 0 else "no",
         save_strategy="steps",
+        logging_steps=10,
         gradient_accumulation_steps = args.gradient_accumulation_steps,
-        logging_steps=args.log_interval,
         eval_steps= 1000, #args.log_interval,
         save_steps= 1000, #args.log_interval,
         output_dir=output_dir,
@@ -207,7 +210,7 @@ training_args = TrainingArguments(
         # ddp_find_unused_parameters=False if ddp else None,
         group_by_length=True, # group sequences of roughly the same length together to speed up training
         report_to="wandb", # if use_wandb else "none",
-        run_name=args.wandb_run_name if args.wandb_run_name else f"finetune-{datetime.now().strftime('%Y-%m-%d-%H-%M')}" # if use_wandb else None,
+        run_name='finetune-exec',
     )
 
 trainer = Trainer(
@@ -229,14 +232,12 @@ model.state_dict = (lambda self, *_, **__: get_peft_model_state_dict(self, old_s
 # if torch.__version__ >= "2" and sys.platform != "win32":
 #     print("compiling the model")
 #     model = torch.compile(model)
-
 if trainer.accelerator.is_main_process:
     print('Hi from main process!!!')
 
 print('Starting to train')
 
 trainer.train()
-
 try:
     merged_model_temp = model.merge_and_unload()
     merged_model_temp.save_pretrained(f"{output_dir}/checkpoint-final/HF_checkpoint/")

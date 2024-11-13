@@ -1,5 +1,7 @@
 from datetime import datetime
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
+os.environ['HF_HOME'] = '/data/tir/projects/tir7/user_data/srijithr/hf_cache_dir/'
 import sys
 import argparse
 
@@ -20,24 +22,38 @@ from accelerate import Accelerator
 parser = argparse.ArgumentParser()
 
 # Add arguments with default values
-parser.add_argument("--train_path", default="/data/tir/projects/tir6/general/swaghjal/trajectories/filtered_gt_3_sorted_trajectories_full_with_2to3.jsonl", help="Path to the training data file")
+parser.add_argument("--train_path", default="/home/srijithr/course_hw/anlp_project/ECCO/improve-code-efficiency-main/src/fine_tuning/data/trajectories.jsonl", help="Path to the training data file")
 # parser.add_argument("--eval_path", default="/data/tir/projects/tir6/general/vveerend/improving-code-efficiency/shared/data/filtered_sped_up_val.jsonl", help="Path to the evaluation data file")
-parser.add_argument('--model', default='/data/models/huggingface/meta-llama/CodeLlama-7b-Python-hf')
+parser.add_argument('--model', default='deepseek-ai/deepseek-coder-7b-instruct-v1.5')
 parser.add_argument('--lora', default=True)
-parser.add_argument('--instruct', default=False, action='store_true')
-parser.add_argument('--markdown_format', default=False, action='store_true')
+parser.add_argument('--instruct', default=True, action='store_true')
+parser.add_argument('--markdown_format', default=True, action='store_true')
 parser.add_argument('--device_map', default=True, action='store_false')
 parser.add_argument('--exec_feedback', default=False, action='store_true')
-parser.add_argument('--hub_model_name', default=None)
+parser.add_argument('--hub_model_name', default='trajectories_deepseek')
+parser.add_argument('--gradient_accumulation_steps', type=int, default=4) 
 
 # Train args
-parser.add_argument('--batch_size', type=int, default=32)
+parser.add_argument('--batch_size', type=int, default=2)
 parser.add_argument('--lora_rank', type=int, default=8)
 parser.add_argument('--max_seq_len', type=int, default=1024)
-parser.add_argument('--log_interval', type=int, default=1000)
+parser.add_argument('--log_interval', type=int, default=10)
 
 # Parse the arguments
 args = parser.parse_args()
+
+tokenizer = AutoTokenizer.from_pretrained(args.model)
+tokenizer.save_pretrained('/data/tir/projects/tir7/user_data/srijithr/hf_cache_dir/FINAL_trajectories_2024-11-12_04:36:59/checkpoint-final/HF_checkpoint')
+
+
+if torch.cuda.device_count() > 1:
+    multi_gpu = True
+    device_map = None 
+else:
+    multi_gpu = False
+    device_map = 'auto'
+
+    output_dir =  f"/data/tir/projects/tir7/user_data/srijithr/hf_cache_dir/FINAL_trajectories_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}"
 
 # Assign the argument values to variables
 train_file = args.train_path
@@ -53,15 +69,15 @@ data = train_dataset.train_test_split(test_size=0.2)
 train_dataset, eval_dataset = data['train'], data['test']
 
 
-
 base_model = args.model
 model = AutoModelForCausalLM.from_pretrained(
     base_model,
     # load_in_8bit = True,
     torch_dtype=torch.bfloat16,
-    device_map="auto" if args.device_map else None
+    device_map=device_map,
 )
 tokenizer = AutoTokenizer.from_pretrained(base_model)
+
 
 tokenizer.add_eos_token = True
 tokenizer.pad_token_id = 0
@@ -156,14 +172,14 @@ if resume_from_checkpoint:
     else:
         print(f"Checkpoint {resume_from_checkpoint} not found")
 
-wandb_project = "Optim-finetune"
+wandb_project = ""
 if len(wandb_project) > 0:
     os.environ["WANDB_PROJECT"] = wandb_project
 
-if torch.cuda.device_count() > 1:
-    # keeps Trainer from trying its own DataParallelism when more than 1 gpu is available
-    model.is_parallelizable = True
-    model.model_parallel = True
+# if torch.cuda.device_count() > 1:
+#     # keeps Trainer from trying its own DataParallelism when more than 1 gpu is available
+#     model.is_parallelizable = True
+#     model.model_parallel = True
 
 # from dataclasses import dataclass
 # @dataclass
@@ -186,7 +202,7 @@ if torch.cuda.device_count() > 1:
 batch_size = args.batch_size
 per_device_train_batch_size = args.batch_size
 # gradient_accumulation_steps = batch_size // per_device_train_batch_size
-output_dir = f"/data/tir/projects/tir6/general/swaghjal/checkpoints/trajectories_checkpoints_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}"
+
 
 training_args = TrainingArguments(
         per_device_train_batch_size=per_device_train_batch_size,
@@ -197,18 +213,19 @@ training_args = TrainingArguments(
         learning_rate=1e-3,
         fp16=True,
         optim="adamw_torch",
-        evaluation_strategy="steps", # if val_set_size > 0 else "no",
+        evaluation_strategy="no", # if val_set_size > 0 else "no",
         save_strategy="steps",
-        logging_steps=args.log_interval,
-        eval_steps=args.log_interval,
-        save_steps=args.log_interval,
+        logging_steps=10,
+        gradient_accumulation_steps = args.gradient_accumulation_steps,
+        eval_steps=1000,
+        save_steps=1000,
         output_dir=output_dir,
         # save_total_limit=3,
         load_best_model_at_end=False,
         # ddp_find_unused_parameters=False if ddp else None,
         group_by_length=True, # group sequences of roughly the same length together to speed up training
         report_to="wandb", # if use_wandb else "none",
-        run_name=f"finetune-trajectories-codellama_instruct_pairwise", # if use_wandb else None,
+        run_name=f"finetune-trajectories", # if use_wandb else None,
     )
 
 trainer = Trainer(
@@ -227,11 +244,21 @@ old_state_dict = model.state_dict
 model.state_dict = (lambda self, *_, **__: get_peft_model_state_dict(self, old_state_dict())).__get__(
     model, type(model)
 )
-if torch.__version__ >= "2" and sys.platform != "win32":
-    print("compiling the model")
-    model = torch.compile(model)
+# if torch.__version__ >= "2" and sys.platform != "win32":
+#     print("compiling the model")
+#     model = torch.compile(model)
+if trainer.accelerator.is_main_process:
+    print('Hi from main process!!!')
+
+print('Starting to train')
 
 trainer.train()
+try:
+    merged_model_temp = model.merge_and_unload()
+    merged_model_temp.save_pretrained(f"{output_dir}/checkpoint-final/HF_checkpoint/")
+except:
+    pass
+
 
 if trainer.accelerator.is_main_process: # Running on main process only 
     if args.lora:
@@ -248,3 +275,5 @@ if trainer.accelerator.is_main_process: # Running on main process only
     merged_model.push_to_hub(args.hub_model_name)
     tokenizer.push_to_hub(args.hub_model_name)
 
+    os.environ['HF_HOME'] = '/data/tir/projects/tir7/user_data/srijithr/hf_cache_dir/'
+    # Final models saved to : /data/tir/projects/tir7/user_data/srijithr/hf_cache_dir/FINAL_trajectories_2024-11-12_04:36:59/checkpoint-final/HF_checkpoint

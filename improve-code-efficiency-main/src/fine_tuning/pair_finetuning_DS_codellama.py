@@ -2,8 +2,8 @@ from datetime import datetime
 import os
 import sys
 import argparse
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
 os.environ['HF_HOME'] = '/data/tir/projects/tir7/user_data/srijithr/hf_cache_dir/'
+os.environ['OMP_NUM_THREADS'] = '4' # SRIJITH 
 
 import torch
 from peft import (
@@ -23,16 +23,16 @@ parser = argparse.ArgumentParser()
 # Add arguments with default values
 # parser.add_argument("--train_path", default="/data/tir/projects/tir6/general/vveerend/improving-code-efficiency/shared/data/filtered_sped_up_train.jsonl", help="Path to the training data file")
 # parser.add_argument("--eval_path", default="/data/tir/projects/tir6/general/vveerend/improving-code-efficiency/shared/data/filtered_sped_up_val.jsonl", help="Path to the evaluation data file")
-parser.add_argument('--model', default='deepseek-ai/deepseek-coder-7b-instruct-v1.5')
+parser.add_argument('--model', default='codellama/CodeLlama-13b-Python-hf')  # deepseek-ai/deepseek-coder-7b-instruct-v1.5 #codellama/CodeLlama-13b-Python-hf
 parser.add_argument('--lora', default=True)
 parser.add_argument('--instruct', default=True, action='store_true') # Check this
-parser.add_argument('--markdown_format', default=True, action='store_true') # True for deepseek specifice adjustment; False for codellama
+parser.add_argument('--markdown_format', default=False, action='store_true') # True for deepseek specifice adjustment; False for codellama
 parser.add_argument('--device_map', default=True, action='store_false')
 parser.add_argument('--exec_feedback', default=False, action='store_true')
 parser.add_argument('--hub_model_name', default=None)
-parser.add_argument('--wandb_run_name', default='DeepSeek-7B-history_based_SFT')
+parser.add_argument('--wandb_run_name', default='codellama-13b-SFT')
 # Train args
-parser.add_argument('--batch_size', type=int, default=2)
+parser.add_argument('--batch_size', type=int, default=1)
 parser.add_argument('--gradient_accumulation_steps', type=int, default=4)  # They finetune on 4 gpus with per device batch size of 2
 # adjust 
 parser.add_argument('--lora_rank', type=int, default=8) 
@@ -53,21 +53,20 @@ else:
     multi_gpu = False
     device_map = 'auto'
 
-output_dir = f"/data/tir/projects/tir7/user_data/srijithr/hf_cache_dir/checkpoints_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}"
+output_dir = f"/data/tir/projects/tir7/user_data/srijithr/hf_cache_dir/checkpoints_DS_CL{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}"
 
 if multi_gpu:
     accelerator = Accelerator() 
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0" # for single gpu 
 
-# SRI 
-args.gradient_accumulation_steps =  args.gradient_accumulation_steps // torch.cuda.device_count()
+
+# SRI
+# args.gradient_accumulation_steps =  args.gradient_accumulation_steps // torch.cuda.device_count()
 print(f'Gradient accumulation steps: {args.gradient_accumulation_steps}')
 print('There are {} GPUs available.'.format(torch.cuda.device_count()))
 # Assign the argument values to variables
 # train_file = args.train_path
 # eval_file = args.eval_path
 # accelerator = Accelerator()
-x = fast_code['train'].filter(lambda example: example['problem_id'].startswith('p00001'))
 
 dataset = load_dataset('EfficientCode/ECCO', 'edit')
 
@@ -195,12 +194,12 @@ training_args = TrainingArguments(
         fp16=True,
         optim="adamw_torch",
         # SRIJITH eval_strategy for ecco env and evaluation strategy for spin env
-        eval_strategy="steps", # if val_set_size > 0 else "no",
+        eval_strategy="no", # if val_set_size > 0 else "no",
         save_strategy="steps",
         gradient_accumulation_steps = args.gradient_accumulation_steps,
         logging_steps=args.log_interval,
         eval_steps= 1000, #args.log_interval,
-        save_steps= 1000, #args.log_interval,
+        save_steps= 1000, #args.log_interval, # SRIJITH
         output_dir=output_dir,
         # save_total_limit=3,
         load_best_model_at_end=False,
