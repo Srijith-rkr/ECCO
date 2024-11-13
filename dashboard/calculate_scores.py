@@ -3,15 +3,15 @@ import os
 from pathlib import Path
 import pandas as pd
 wd = Path(__file__).parent
-
+import numpy as np  
 # temp = '/home/srijithr/course_hw/anlp_project/ECCO/outputs/srijith_inference_outputs/edit_deepseek_instruct_nrowsNone_tokens1024_temp0.4_fewshotex2_samples1_2024-11-10_08:26:33.jsonl'
 # json_data = pd.read_json(temp, orient='records', lines = True)
 # x = json_data.head(1).to_dict()
 
-look_into = Path('/home/srijithr/course_hw/anlp_project/edit-public-temp')
+look_into = Path('/home/srijithr/course_hw/anlp_project/ECCO/dashboard/deepseek/judge_outputs/sft')
 files = os.listdir(look_into)
 
-
+results_list = []
 for file in files:
 
     with open(look_into / file, 'r') as f:
@@ -45,12 +45,28 @@ for file in files:
             mems.append(sum(in_mem_passed) / sum(out_mem_passed))
 
 
-    print(file)
-    print(f'Total num of questions: {num_of_questions}')
-    print(f'Num of correct questions: {num_of_correct_questions}')
-    print(f'Accuracy: {num_of_correct_questions/num_of_questions*100}%')
-    print(f'Speed up: {sum(speeds) / len(speeds)}')
-    print(f'Memory reduction: {sum(mems) / len(mems)}')
-    print('\n')
+    # print(file)
+    # print(f'Total num of questions: {num_of_questions}')
+    # print(f'Num of correct questions: {num_of_correct_questions}')
+    # print(f'Accuracy: {num_of_correct_questions/num_of_questions*100}%')
+    # print(f'Speed up: {sum(speeds) / len(speeds)}')
+    # print(f'Memory reduction: {sum(mems) / len(mems)}')
+    # print('\n')
 
 
+    speeds_np = np.array(speeds)
+    mems_np = np.array(mems)
+
+    # Create a dictionary to store the results
+    results = {
+        'file': file,
+        'total_num_of_questions': num_of_questions,
+        'num_of_correct_questions': num_of_correct_questions,
+        'accuracy': num_of_correct_questions / num_of_questions * 100,
+        'speed_up': f'{np.mean(speeds_np):.2f} ± {np.std(speeds_np):.2f}',
+        'memory_reduction': f'{np.mean(mems_np):.2f} ± {np.std(mems_np):.2f}'
+    }
+    results_list.append(results)
+
+df = pd.DataFrame(results_list)
+df.to_excel('/home/srijithr/course_hw/anlp_project/outputs.xlsx')
